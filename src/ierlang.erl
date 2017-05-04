@@ -8,7 +8,7 @@
 %%% @end
 %%% Created : 31. Mar 2014 10:02
 %%%-------------------------------------------------------------------
--module (ierl_script).
+-module (ierlang).
 -export ([main/1]).
 
 %% JSON FILE CONTENTS
@@ -25,7 +25,7 @@
 %%      transport: "tcp",
 %%      iopub_port: 52247
 
-main(JsonFile) ->
+main([JsonFile]) ->
   io:format("[ERLANG KERNEL]~n"),
   erlang:display(JsonFile),
   %% Read json file
