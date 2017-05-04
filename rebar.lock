@@ -1,0 +1,14 @@
+{"1.1.0",
+[{<<"chumak">>,{pkg,<<"chumak">>,<<"1.2.0">>},0},
+ {<<"quickrand">>,{pkg,<<"quickrand">>,<<"1.7.0">>},1},
+ {<<"sandbox">>,
+  {git,"git://github.com/robertoaloi/erlang-sandbox.git",
+       {ref,"57d5187dba618e8770c5f552a81f453e42f91ff5"}},
+  0},
+ {<<"uuid_erl">>,{pkg,<<"uuid_erl">>,<<"1.7.0">>},0}]}.
+[
+{pkg_hash,[
+ {<<"chumak">>, <<"9821E0C6494A22BAD8C9F958BF0A48F701ED9A36F2817066B44D05338530BD9D">>},
+ {<<"quickrand">>, <<"FF3916C50BC10A8DC62417FC6049FEF5EA56D5DBCFCE546FAABFB6188E3BAEAA">>},
+ {<<"uuid_erl">>, <<"EB803855E12D57B1CC10522781D1B42064FA2E4C576731700EE48D84A9283292">>}]}
+].
