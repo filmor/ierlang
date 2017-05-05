@@ -12,15 +12,15 @@
 -export ([start/2]).
 
 -define(DEBUG, false).
--define(EXECUTE_REQUEST, "execute_request").
--define(EXECUTE_REPLY, "execute_reply").
--define(KERNEL_INFO_REQUEST, "kernel_info_request").
--define(KERNEL_INFO_REPLY, "kernel_info_reply").
--define(COMPLETE_REQUEST, "complete_request").
--define(STATUS, "status").
--define(OK_STATUS, "ok").
--define(ERROR_STATUS, "error").
--define(SUCCESS_MSG, "Successfully Compiled").
+-define(EXECUTE_REQUEST, <<"execute_request">>).
+-define(EXECUTE_REPLY, <<"execute_reply">>).
+-define(KERNEL_INFO_REQUEST, <<"kernel_info_request">>).
+-define(KERNEL_INFO_REPLY, <<"kernel_info_reply">>).
+-define(COMPLETE_REQUEST, <<"complete_request">>).
+-define(STATUS, <<"status">>).
+-define(OK_STATUS, <<"ok">>).
+-define(ERROR_STATUS, <<"error">>).
+-define(SUCCESS_MSG, <<"Successfully Compiled">>).
 
 -record(reply_message, {
   uuid,                       % uuid
@@ -47,22 +47,19 @@ loop(ShellSocket, IOPubSocket, ExeCount) ->
 %%%      acts upon the message contents, then replies to IPython
 shell_listener(ShellSocket, IOPubSocket, ExeCount, Bindings)->
     print("in shell listener"),
-    {ok, UUID} = erlzmq:recv(ShellSocket),
+    {ok, Mp} = chumak:recv_multipart(ShellSocket),
+
+    [UUID, Delim, Hmac, Header, ParentHeader, Metadata, Content] = Mp,
+
     print("[Shell] Received UUID ",[UUID]),
-    {ok, Delim} = erlzmq:recv(ShellSocket),
     print("[Shell] Received Delim ", [Delim]),
-    {ok, Hmac} = erlzmq:recv(ShellSocket),
     print("[Shell] Received HMAC ", [Hmac]),
-    {ok, Header} = erlzmq:recv(ShellSocket),
     print("[Shell] Received Header ", [Header]),
-    {ok, ParentHeader} = erlzmq:recv(ShellSocket),
     print("[Shell] Received ParentHeader ", [ParentHeader]),
-    {ok, Metadata} = erlzmq:recv(ShellSocket),
     print("[Shell] Received Metadata ", [Metadata]),
-    {ok, Content} = erlzmq:recv(ShellSocket),
     print("[Shell] Received Content ", [Content]),
 
-    case ierl_message_parser:parse_header([Header]) of
+    case ierl_message_parser:parse_header(Header) of
         %%% KERNEL_INFO_REQUEST
         {ok, _Username, Session, _MessageID, ?KERNEL_INFO_REQUEST, Date}->
       %%% KERNEL_INFO_REPLY
@@ -227,13 +224,7 @@ shell_listener(ShellSocket, IOPubSocket, ExeCount, Bindings)->
 
 %% @doc Function to print stuff if debugging is set to true
 print(Stuff)->
-  case ?DEBUG of
-    true ->  io:format("~p~n", [Stuff]);
-    _Else -> "Do nothing"
-  end.
+    io:format("~p~n", [Stuff]).
 print(Prompt, Stuff)->
-  case ?DEBUG of
-    true ->  io:format(string:concat(Prompt, "~p~n"), [Stuff]);
-    _Else -> "Do nothing"
-  end.
+    io:format(string:concat(Prompt, "~p~n"), [Stuff]).
 

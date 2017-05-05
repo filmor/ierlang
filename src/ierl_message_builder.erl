@@ -11,25 +11,24 @@
 -author("Robbie Lynch").
 -export([generate_content_reply/2, generate_content_reply/1,
          create_metadata/0, generate_header_reply/3]).
--define(DEBUG, false).
--define(USERNAME, "ierlang_kernel").
--define(IDLE_STATUS, "idle").
--define(BUSY_STATUS, "busy").
--define(STARTING_STATUS, "starting").
--define(OK_STATUS, "ok").
--define(ERROR_STATUS, "error").
+-define(USERNAME, ierlang_kernel).
+-define(IDLE_STATUS, idle).
+-define(BUSY_STATUS, busy).
+-define(STARTING_STATUS, starting).
+-define(OK_STATUS, ok).
+-define(ERROR_STATUS, error).
 
 %% @spec generate_header_reply(list(), list(), list()) -> list()
 %% @doc Creates the header for the message being sent to IPython
 generate_header_reply(Session, MessageType, Date)->
-  HeaderPropList = {struct, [
+  HeaderPropList = [
     {date, Date},
     {username, ?USERNAME},
     {session, Session},
-    {msg_id, uuid:to_string(uuid:v4())},
+    {msg_id, list_to_binary(uuid:uuid_to_string(uuid:get_v4()))},
     {msg_type, MessageType}
-  ]},
-  Header = mochijson2:encode(HeaderPropList),
+  ],
+  Header = jsx:encode(HeaderPropList),
   Header.
 
 %% @spec generate_content_reply(atom()) -> list()
@@ -37,92 +36,82 @@ generate_header_reply(Session, MessageType, Date)->
 %%      iopub socket.
 generate_content_reply(busy)->
   %%Should be sent before the execution of the code
-  Content = {struct, [{execution_state, ?BUSY_STATUS}]},
-  ContentJson = mochijson2:encode(Content),
+  Content = [{execution_state, ?BUSY_STATUS}],
+  ContentJson = jsx:encode(Content),
   ContentJson;
 
 %% @spec generate_content_reply(atom()) -> list()
 %% @doc Creates the content reply for the idle status sent over the
 %%      iopub socket.
-generate_content_reply(idle)->
-  Content = {struct,    [     {execution_state, ?IDLE_STATUS}    ]},
-  ContentJson = mochijson2:encode(Content),
+generate_content_reply(idle) ->
+  Content = [{execution_state, ?IDLE_STATUS}],
+  ContentJson = jsx:encode(Content),
   ContentJson;
 
 %% @spec generate_content_reply(atom()) -> list()
 %% @doc Creates the content reply for the starting status sent over the
 %%      iopub socket.
 generate_content_reply(starting)->
-  Content = {struct,    [     {execution_state, ?STARTING_STATUS}    ]},
-  ContentJson = mochijson2:encode(Content),
+  Content = [{execution_state, ?STARTING_STATUS}],
+  ContentJson = jsx:encode(Content),
   ContentJson;
 
 %% @spec generate_content_reply(atom()) -> list()
 %% @doc Creates the content reply for the kernel_info_reply sent over the
 %%      shell socket.
 generate_content_reply(kernel_info_reply)->
-%    Version of messaging protocol (mandatory).
-%   The first integer indicates major version.  It is incremented when
-%   there is any backward incompatible change.
-%   The second integer indicates minor version.  It is incremented when
-%   there is any backward compatible change.
-%   'protocol_version': [int, int],
-  ProtocolVersion = [4, 1],
-%   IPython version number (optional).
-%   Non-python kernel backend may not have this version number.
-%   The last component is an extra field, which may be 'dev' or
-%   'rc1' in development version.  It is an empty string for
-%   released version.
-%   'ipython_version': [int, int, int, str],
-  IPythonVersion = [2, 0, 0, "dev"],
-%   Language version number (mandatory).
-%   It is Python version number (e.g., [2, 7, 3]) for the kernel
-%   included in IPython.
-%   'language_version': [int, ...],
-  LanguageVersion = [0, 0, 1],
-%   Programming language in which kernel is implemented (mandatory).
-%   Kernel included in IPython returns 'python'.
-%   'language': str,
-  Language = "erlang",
+    {ok, Version} = file:read_file(
+                      filename:join(
+                        [
+                         code:root_dir(),
+                         "releases",
+                         erlang:system_info(otp_release),
+                         "OTP_VERSION"
+                        ]
+                       )
+                     ),
 
-%    Build the proplist to be converted to json
-  Content = {struct,    [
-    {protocol_version, ProtocolVersion},
-    {language_version, LanguageVersion},
-    {ipython_version, IPythonVersion},
-    {language, Language}
-  ]},
-%    Build the Json Reply
-  ReplyJson = mochijson2:encode(Content),
-  ReplyJson.
+    %    Build the proplist to be converted to json
+    Content =
+    #{
+      protocol_version => <<"5.1">>,
+      implementation => <<"IErlang">>,
+      implementation_version => <<"0.2">>,
+      language_info => #{
+        name => erlang,
+        version => Version,
+        file_extension => <<".erl">>
+       }
+     },
+    %    Build the Json Reply
+    ReplyJson = jsx:encode(Content),
+    ReplyJson.
 
 %% @doc Creates the content reply for a successful execute_reply
 %%      sent over the shell socket.
 generate_content_reply(execute_reply, {"ok", ExecutionCount, _UserVars, _UserExprs})->
-  Content = {struct,    [
+  Content = [
     {status, ?OK_STATUS},
     {execution_count, ExecutionCount},
     {payload, []},
     {user_variables, {}},
     {user_expressions, {}}
-  ]},
-  ContentJson = mochijson2:encode(Content),
+  ],
+  ContentJson = jsx:encode(Content),
   ContentJson;
 
 %% @spec generate_content_reply(atom(), tuple()) -> list()
 %% @doc Creates the content reply for an unsuccessful execute_reply
 %%      sent over the shell socket.
 generate_content_reply(execute_reply_error, {"error", ExecutionCount, ExceptionName, _ExceptionValue, Traceback})->
-  print("in generate_content_reply for execute reply error"),
-  Content = {struct,    [
+  Content = [
     {status, ?ERROR_STATUS},
     {execution_count, ExecutionCount},
     {ename, ExceptionName},
     {evalue, "ERROR"},
     {traceback, Traceback}
-  ]},
-  print("converting to json"),
-  ContentJson = mochijson2:encode(Content),
+  ],
+  ContentJson = jsx:encode(Content),
   ContentJson;
 
 %% @spec generate_content_reply(atom(), tuple()) -> list()
@@ -131,33 +120,33 @@ generate_content_reply(execute_reply_error, {"error", ExecutionCount, ExceptionN
 generate_content_reply(pyout, {ExecutionCount, CodeOutput})->
   PyoutContent =
   try
-    Data = {struct, [
+    Data = [
     {'text/html', CodeOutput},
     {'text/plain', CodeOutput}
-  ]},
-  DataJson = mochijson2:encode(Data),
+  ],
+  DataJson = jsx:encode(Data),
 
-  Content = {struct,    [
+  Content = [
     {execution_count, ExecutionCount},
     {data, DataJson},
     {metadata, {}}
-  ]},
-  mochijson2:encode(Content)
+  ],
+  jsx:encode(Content)
   catch
       _:_ ->
         FrmtCode = io_lib:format("~p", [CodeOutput]),
-        FrmtData = {struct, [
+        FrmtData = [
           {'text/html', FrmtCode},
           {'text/plain', FrmtCode}
-        ]},
-        FrmtDataJson = mochijson2:encode(FrmtData),
+        ],
+        FrmtDataJson = jsx:encode(FrmtData),
 
-        FrmtContent = {struct,    [
+        FrmtContent = [
         {execution_count, ExecutionCount},
         {data, FrmtDataJson},
         {metadata, {}}
-        ]},
-        mochijson2:encode(FrmtContent)
+        ],
+        jsx:encode(FrmtContent)
   end,
   PyoutContent;
 
@@ -165,23 +154,23 @@ generate_content_reply(pyout, {ExecutionCount, CodeOutput})->
 %% @doc Creates the content reply for pyin
 %%      sent over the iopub socket.
 generate_content_reply(pyin, {Code, ExecutionCount})->
-  Content = {struct,    [     {execution_count, ExecutionCount},
+  Content = [{execution_count, ExecutionCount},
     {code, Code}
-  ]},
-  PyinContent = mochijson2:encode(Content),
+  ],
+  PyinContent = jsx:encode(Content),
   PyinContent;
 
 %% @spec generate_content_reply(atom(), tuple()) -> list()
 %% @doc Creates the content reply for pyerr
 %%      sent over the iopub socket.
 generate_content_reply(pyerr, {_ExceptionName, ExecutionCount, _ExceptionValue, Traceback})->
-  Content = {struct,    [
+  Content = [
     {execution_count, ExecutionCount},
     {ename, "error"},
     {evalue, "ERROR"},
     {traceback, Traceback}
-  ]},
-  PyerrContent = mochijson2:encode(Content),
+  ],
+  PyerrContent = jsx:encode(Content),
   PyerrContent;
 
 %% @spec generate_content_reply(atom(), tuple()) -> list()
@@ -189,36 +178,24 @@ generate_content_reply(pyerr, {_ExceptionName, ExecutionCount, _ExceptionValue, 
 %%      sent over the iopub socket.
 generate_content_reply(display_data, {Source, RawData, _MetaData})->
   % Create the data dictionary with mime types as keys
-  DataStruct = {struct, [
+  DataStruct = [
     {'text/html', RawData},
     {'text/plain', RawData}
-  ]},
-  Data = mochijson2:encode(DataStruct),
+  ],
+  Data = jsx:encode(DataStruct),
 
   % Create the content
-  Content = {struct,    [
+  Content = [
     {source, Source},
     {data, Data},
     {metadata, {}}
-  ]},
-  DisplayContent = mochijson2:encode(Content),
+  ],
+  DisplayContent = jsx:encode(Content),
   DisplayContent.
 
 %% @spec create_metadata() -> list()
 %% @doc Creates the metadata for the outgoing message
 create_metadata()->
-  Metadata = {struct,    []},
-  Md = mochijson2:encode(Metadata),
+  Metadata = [],
+  Md = jsx:encode(Metadata),
   Md.
-
-%% @doc Function to print stuff if debugging is set to true
-print(Stuff)->
-  case ?DEBUG of
-    true ->  io:format("~p~n", [Stuff]);
-    _Else -> "Do nothing"
-  end.
-print(Prompt, Stuff)->
-  case ?DEBUG of
-    true ->  io:format(string:concat(Prompt, "~p~n"), [Stuff]);
-    _Else -> "Do nothing"
-  end.

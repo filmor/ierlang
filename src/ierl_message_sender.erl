@@ -70,10 +70,15 @@ send(display_data, IOPubSocket, {Source, RawData, Metadata}, [Session, IPythonHe
 %%% @doc Send the reply message record to IPython on the given socket
 send_reply(Record, Socket)->
   %% Send the Reply to IPython as a ZMQ multi-part message
-  ok = erlzmq:send(Socket, list_to_binary(Record#reply_message.uuid), [sndmore]),
-  ok = erlzmq:send(Socket, Record#reply_message.delim, [sndmore]),
-  ok = erlzmq:send(Socket, Record#reply_message.hmac, [sndmore]),
-  ok = erlzmq:send(Socket, list_to_binary(Record#reply_message.header), [sndmore]),
-  ok = erlzmq:send(Socket, Record#reply_message.parent_header, [sndmore]),
-  ok = erlzmq:send(Socket, Record#reply_message.metadata, [sndmore]),
-  ok = erlzmq:send(Socket, list_to_binary(Record#reply_message.content)).
+
+    Msg = [
+           Record#reply_message.uuid,
+           Record#reply_message.delim,
+           Record#reply_message.hmac,
+           Record#reply_message.header,
+           Record#reply_message.parent_header,
+           Record#reply_message.metadata,
+           Record#reply_message.content
+          ],
+
+  ok = chumak:send_multipart(Socket, Msg).

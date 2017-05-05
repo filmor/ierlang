@@ -19,7 +19,7 @@ loop(ControlSocket) ->
   loop(ControlSocket).
 
 control_listener(ControlSocket)->
-  {ok, Msg} = erlzmq:recv(ControlSocket),
+  {ok, Msg} = chumak:recv_multipart(ControlSocket),
   io:format("[Control] ~s~n", [Msg]).
 
 %% TODO - Handle requests on the control server
