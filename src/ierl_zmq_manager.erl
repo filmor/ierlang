@@ -12,15 +12,10 @@
 -author("Robbie Lynch").
 -export([run/1]).
 
+-include("./records.hrl").
+
 %% @doc Function that creates and binds all zmq sockets. Starts the heartbeat, shell and control servers.
-run([{hbport, HbPort}, {shellport, ShellPort}, {controlport, ControlPort}, {iopubport, IOPubPort}, {stdinport, StdInPort}, {ip, IP}, {transport, Transport}])->
-
-    application:start(chumak),
-
-    % TODO: to existing atom
-    Transport1 = list_to_atom(binary_to_list(Transport)),
-    IP1 = binary_to_list(IP),
-
+run(#ierl_connection_file{} = ConnData)->
     %% Create Sockets that will be used to communicate with IPython
     {ok, HeartbeatSocket} = chumak:socket(rep, "heartbeat"),
     {ok, ControlSocket} = chumak:socket(router, "control"),
@@ -29,22 +24,26 @@ run([{hbport, HbPort}, {shellport, ShellPort}, {controlport, ControlPort}, {iopu
     {ok, IOPubSocket} = chumak:socket(pub, "pub"),
 
     Bind = fun (Socket, Port) ->
-                   {ok, _Pid} = chumak:bind(Socket, Transport1, IP1, Port)
+                   {ok, _Pid} = chumak:bind(
+                                  Socket,
+                                  ConnData#ierl_connection_file.transport,
+                                  binary_to_list(ConnData#ierl_connection_file.ip),
+                                  Port
+                                 )
            end,
 
-    Bind(HeartbeatSocket, HbPort),
-    Bind(ControlSocket, ControlPort),
-    Bind(StdinSocket, StdInPort),
-    Bind(ShellSocket, ShellPort),
-    Bind(IOPubSocket, IOPubPort),
-
+    Bind(HeartbeatSocket, ConnData#ierl_connection_file.heartbeat_port),
+    Bind(ControlSocket, ConnData#ierl_connection_file.control_port),
+    Bind(StdinSocket, ConnData#ierl_connection_file.stdin_port),
+    Bind(ShellSocket, ConnData#ierl_connection_file.shell_port),
+    Bind(IOPubSocket, ConnData#ierl_connection_file.iopub_port),
 
     % Start the heartbeat server
-    spawn(ierl_heartbeat_server, start, [HeartbeatSocket]),
+    spawn_link(ierl_heartbeat_server, start, [HeartbeatSocket]),
     % Start the Shell server
-    spawn(ierl_shell_server, start, [ShellSocket, IOPubSocket]),
+    spawn_link(ierl_shell_server, start, [ShellSocket, IOPubSocket, ConnData]),
     % Start the Control server
-    spawn(ierl_control_server, start, [ControlSocket]),
+    spawn_link(ierl_control_server, start, [ControlSocket]),
 
     %% Constantly listen and reply to messages
     loop(HeartbeatSocket, ControlSocket, StdinSocket, ShellSocket, IOPubSocket).

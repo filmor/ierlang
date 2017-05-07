@@ -1,6 +1,8 @@
 {"1.1.0",
 [{<<"chumak">>,{pkg,<<"chumak">>,<<"1.2.0">>},0},
+ {<<"goldrush">>,{pkg,<<"goldrush">>,<<"0.1.9">>},1},
  {<<"jsx">>,{pkg,<<"jsx">>,<<"2.8.2">>},0},
+ {<<"lager">>,{pkg,<<"lager">>,<<"3.4.2">>},0},
  {<<"quickrand">>,{pkg,<<"quickrand">>,<<"1.7.0">>},1},
  {<<"sandbox">>,
   {git,"git://github.com/robertoaloi/erlang-sandbox.git",
@@ -10,7 +12,9 @@
 [
 {pkg_hash,[
  {<<"chumak">>, <<"9821E0C6494A22BAD8C9F958BF0A48F701ED9A36F2817066B44D05338530BD9D">>},
+ {<<"goldrush">>, <<"F06E5D5F1277DA5C413E84D5A2924174182FB108DABB39D5EC548B27424CD106">>},
  {<<"jsx">>, <<"7ACC7D785B5ABE8A6E9ADBDE926A24E481F29956DD8B4DF49E3E4E7BCC92A018">>},
+ {<<"lager">>, <<"150B9A17B23AE6D3265CC10DC360747621CF217B7A22B8CDDF03B2909DBF7AA5">>},
  {<<"quickrand">>, <<"FF3916C50BC10A8DC62417FC6049FEF5EA56D5DBCFCE546FAABFB6188E3BAEAA">>},
  {<<"uuid">>, <<"EB803855E12D57B1CC10522781D1B42064FA2E4C576731700EE48D84A9283292">>}]}
 ].

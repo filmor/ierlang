@@ -9,7 +9,7 @@
 %%%-------------------------------------------------------------------
 -module (ierl_shell_server).
 -author("Robbie Lynch").
--export ([start/2]).
+-export ([start/3]).
 
 -define(DEBUG, false).
 -define(EXECUTE_REQUEST, <<"execute_request">>).
@@ -34,18 +34,18 @@
 
 
 %%% @doc Starts the shell server
-start(ShellSocket, IOPubSocket) ->
+start(ShellSocket, IOPubSocket, ConnData) ->
     ExeCount = 1,
-    loop(ShellSocket, IOPubSocket, ExeCount).
+    loop(ShellSocket, IOPubSocket, ExeCount, ConnData).
 
-loop(ShellSocket, IOPubSocket, ExeCount) ->
-   shell_listener(ShellSocket, IOPubSocket, ExeCount, []),
-   loop(ShellSocket, IOPubSocket, ExeCount).
+loop(ShellSocket, IOPubSocket, ExeCount, ConnData) ->
+   shell_listener(ShellSocket, IOPubSocket, ExeCount, ConnData, []),
+   loop(ShellSocket, IOPubSocket, ExeCount, ConnData).
 
 
 %%% @doc Listens for messages on the Shell Socket, parses and
 %%%      acts upon the message contents, then replies to IPython
-shell_listener(ShellSocket, IOPubSocket, ExeCount, Bindings)->
+shell_listener(ShellSocket, IOPubSocket, ExeCount, ConnData, Bindings)->
     print("in shell listener"),
     {ok, Mp} = chumak:recv_multipart(ShellSocket),
 
@@ -133,7 +133,7 @@ shell_listener(ShellSocket, IOPubSocket, ExeCount, Bindings)->
           ierl_message_sender:send_reply(IdleStatusReplyRecord, IOPubSocket),
 
           %%% Call Shell Listener again, incrementing the execution count by one.
-          shell_listener(ShellSocket, IOPubSocket, ExeCount+1, Bindings);
+          shell_listener(ShellSocket, IOPubSocket, ExeCount+1, ConnData, Bindings);
         %%%----------------------------------------------------------------
         %%% SUCCESSFUL CODE EXECUTION
         %%%----------------------------------------------------------------
@@ -164,7 +164,7 @@ shell_listener(ShellSocket, IOPubSocket, ExeCount, Bindings)->
           ierl_message_sender:send_reply(IdleStatusReplyRecord, IOPubSocket),
 
           %%% Call Shell Listener again, incrementing the execution count by one.
-          shell_listener(ShellSocket, IOPubSocket, ExeCount+1, NewBindings);
+          shell_listener(ShellSocket, IOPubSocket, ExeCount+1, ConnData, NewBindings);
         %%%--------------------------------------------------------------
         %% UNSUCCESSFUL CODE EXECUTION TODO - each char of Traceback being output on separate line
         %% --------------------------------------------------------------
@@ -200,7 +200,7 @@ shell_listener(ShellSocket, IOPubSocket, ExeCount, Bindings)->
           },
           ierl_message_sender:send_reply(IdleStatusReplyRecord, IOPubSocket),
 
-          shell_listener(ShellSocket, IOPubSocket, ExeCount+1, Bindings)
+          shell_listener(ShellSocket, IOPubSocket, ExeCount+1, ConnData, Bindings)
             end;
     %%%----------------------------------------------------------------
     %%% COMPLETE_REQUEST
@@ -214,7 +214,7 @@ shell_listener(ShellSocket, IOPubSocket, ExeCount, Bindings)->
         {error, Reason} ->
           print("[Shell] Error parsing complete_request - ", [Reason])
       end,
-      shell_listener(ShellSocket, IOPubSocket, ExeCount, Bindings);
+      shell_listener(ShellSocket, IOPubSocket, ExeCount, ConnData, Bindings);
     {error, _Username, _Session, _MessageID, _UnexpectedMessageType, _Date} ->
       print("[Shell] Received unexpected message - " + [_UnexpectedMessageType]);
     {error, Reason} ->

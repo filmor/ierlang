@@ -1,5 +1,7 @@
 -module(ierl_connection_file).
 
+-include("./records.hrl").
+
 -export([
     parse/1
 ]).
@@ -17,6 +19,24 @@ parse(Filename) ->
     ShellPort = proplists:get_value(<<"shell_port">>, JsonData),
     Transport = proplists:get_value(<<"transport">>, JsonData),
     IOPubPort = proplists:get_value(<<"iopub_port">>, JsonData),
-    {ok,
-     StdInPort, IP, ControlPort, HbPort, SignatureScheme, Key, ShellPort,
-     Transport, IOPubPort}.
+
+    #ierl_connection_file{
+       transport = binary_to_existing_atom(Transport, utf8),
+       ip = IP,
+
+       control_port = ControlPort,
+       heartbeat_port = HbPort,
+       shell_port = ShellPort,
+       iopub_port = IOPubPort,
+       stdin_port = StdInPort,
+
+       signature_scheme = parse_signature_scheme(SignatureScheme),
+       signature_key = Key
+      }.
+
+
+parse_signature_scheme(<<"hmac-sha256">>) ->
+    sha256;
+
+parse_signature_scheme(Algo) ->
+    error({unknown_signature_scheme, Algo}).

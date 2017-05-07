@@ -1,3 +1,3 @@
 #!/bin/sh
 
-./rebar3 escriptize && jupyter console --kernel ierlang
+escript rebar3 escriptize && python ../jupyter_kernel_test/test_ierl_kernel.py
