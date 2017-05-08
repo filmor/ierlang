@@ -68,6 +68,8 @@ process_message(<<"kernel_info_request">>, Msg, State) ->
       protocol_version => <<"5.1">>,
       implementation => <<"IErlang">>,
       implementation_version => <<"0.2">>,
+      % TODO: Show which node we are running against
+      banner => <<"Erlang kernel">>,
       language_info => #{
         name => erlang,
         version => Version,
@@ -78,13 +80,23 @@ process_message(<<"kernel_info_request">>, Msg, State) ->
     reply(Content, Msg, shell, State),
     State;
 
+process_message(<<"is_complete_request">>, Msg, State) ->
+    % TODO Check for completeness
+    reply(#{ status => complete }, Msg, shell, State),
+    State;
+
 process_message(<<"complete_request">>, Msg, State) ->
     reply(#{ status => <<"error">> }, Msg, shell, State),
     State;
 
 process_message(<<"execute_request">>, Msg, State) ->
     reply(#{ status => <<"error">> }, Msg, shell, State),
-    State#state{exec_count=State#state.exec_count + 1}.
+    State#state{exec_count=State#state.exec_count + 1};
+
+process_message(_Unknown, Msg, State) ->
+    lager:warning("Received unimplemented message: ~s", [_Unknown]),
+    reply(#{ status => <<"error">> }, Msg, shell, State),
+    State.
 
 
 reply(NewMsg, Msg, Socket, State) ->

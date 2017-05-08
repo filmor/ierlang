@@ -4,7 +4,6 @@
          decode/2,
          encode/2,
          msg_type/1,
-         msg_id/1,
          add_headers/3
         ]).
 

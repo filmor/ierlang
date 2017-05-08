@@ -5,7 +5,7 @@
   {description, "IErlang Jupyter Kernel"},
 
   %% The version of the application
-  {vsn, "0.0.4"},
+  {vsn, "0.2"},
 
   %% All modules used by the application.
   {modules,

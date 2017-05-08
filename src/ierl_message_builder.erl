@@ -9,27 +9,13 @@
 %%%-------------------------------------------------------------------
 -module(ierl_message_builder).
 -author("Robbie Lynch").
--export([generate_content_reply/2, generate_content_reply/1,
-         create_metadata/0, generate_header_reply/3]).
+-export([generate_content_reply/2, generate_content_reply/1]).
 -define(USERNAME, ierlang_kernel).
 -define(IDLE_STATUS, idle).
 -define(BUSY_STATUS, busy).
 -define(STARTING_STATUS, starting).
 -define(OK_STATUS, ok).
 -define(ERROR_STATUS, error).
-
-%% @spec generate_header_reply(list(), list(), list()) -> list()
-%% @doc Creates the header for the message being sent to IPython
-generate_header_reply(Session, MessageType, Date) ->
-  HeaderPropList = [
-    {date, Date},
-    {username, ?USERNAME},
-    {session, Session},
-    {msg_id, list_to_binary(uuid:uuid_to_string(uuid:get_v4()))},
-    {msg_type, MessageType}
-  ],
-  Header = jsx:encode(HeaderPropList),
-  Header.
 
 %% @spec generate_content_reply(atom()) -> list()
 %% @doc Creates the content reply for the busy status sent over the
@@ -54,38 +40,7 @@ generate_content_reply(idle) ->
 generate_content_reply(starting)->
   Content = [{execution_state, ?STARTING_STATUS}],
   ContentJson = jsx:encode(Content),
-  ContentJson;
-
-%% @spec generate_content_reply(atom()) -> list()
-%% @doc Creates the content reply for the kernel_info_reply sent over the
-%%      shell socket.
-generate_content_reply(kernel_info_reply)->
-    {ok, Version} = file:read_file(
-                      filename:join(
-                        [
-                         code:root_dir(),
-                         "releases",
-                         erlang:system_info(otp_release),
-                         "OTP_VERSION"
-                        ]
-                       )
-                     ),
-
-    %    Build the proplist to be converted to json
-    Content =
-    #{
-      protocol_version => <<"5.1">>,
-      implementation => <<"IErlang">>,
-      implementation_version => <<"0.2">>,
-      language_info => #{
-        name => erlang,
-        version => Version,
-        file_extension => <<".erl">>
-       }
-     },
-    %    Build the Json Reply
-    ReplyJson = jsx:encode(Content),
-    ReplyJson.
+  ContentJson.
 
 %% @doc Creates the content reply for a successful execute_reply
 %%      sent over the shell socket.
@@ -192,10 +147,3 @@ generate_content_reply(display_data, {Source, RawData, _MetaData})->
   ],
   DisplayContent = jsx:encode(Content),
   DisplayContent.
-
-%% @spec create_metadata() -> list()
-%% @doc Creates the metadata for the outgoing message
-create_metadata()->
-  Metadata = [],
-  Md = jsx:encode(Metadata),
-  Md.
