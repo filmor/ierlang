@@ -14,8 +14,7 @@
 
 %%% @doc Starts the heartbeat server
 start(HeartbeatSocket) ->
-    ok.
-    %loop(HeartbeatSocket).
+    loop(HeartbeatSocket).
 
 loop(HeartbeatSocket) ->
    heartbeat_listener(HeartbeatSocket),
@@ -25,5 +24,5 @@ loop(HeartbeatSocket) ->
 %%%      by listening and replying to ping messages
 heartbeat_listener(HeartbeatSocket)->
     {ok, Msg} = chumak:recv(HeartbeatSocket),
-    lager:info("Got heartbeat message: ~p", [Msg]),
+    lager:debug("Got heartbeat message: ~p", [Msg]),
     chumak:send(HeartbeatSocket, Msg).
