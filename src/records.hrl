@@ -11,16 +11,17 @@
           stdin_port :: integer(),
           iopub_port :: integer(),
 
-          signature_scheme :: crypto:hash_algorithms(),
-          signature_key :: binary()
+          signature_key :: {crypto:hash_algorithms(), binary()}
          }).
 
+
 -record(ierl_msg, {
-          header :: map(),
-          parent_header :: map(),
-          metadata,
-          content,
-          extra_binaries :: list()
+          uuids = []          :: [binary()],
+          header = #{}        :: map(),
+          parent_header = #{} :: map(),
+          metadata = #{}      :: map(),
+          content = #{}       :: map(),
+          extra_binaries = [] :: [binary()]
          }).
 
 -endif.

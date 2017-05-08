@@ -30,8 +30,7 @@ parse(Filename) ->
        iopub_port = IOPubPort,
        stdin_port = StdInPort,
 
-       signature_scheme = parse_signature_scheme(SignatureScheme),
-       signature_key = Key
+       signature_key = {parse_signature_scheme(SignatureScheme), Key}
       }.
 
 

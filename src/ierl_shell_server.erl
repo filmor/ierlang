@@ -11,220 +11,108 @@
 -author("Robbie Lynch").
 -export ([start/3]).
 
--define(DEBUG, false).
--define(EXECUTE_REQUEST, <<"execute_request">>).
--define(EXECUTE_REPLY, <<"execute_reply">>).
--define(KERNEL_INFO_REQUEST, <<"kernel_info_request">>).
--define(KERNEL_INFO_REPLY, <<"kernel_info_reply">>).
--define(COMPLETE_REQUEST, <<"complete_request">>).
--define(STATUS, <<"status">>).
--define(OK_STATUS, <<"ok">>).
--define(ERROR_STATUS, <<"error">>).
--define(SUCCESS_MSG, <<"Successfully Compiled">>).
+-include("./records.hrl").
 
--record(reply_message, {
-  uuid,                       % uuid
-  delim = <<"<IDS|MSG>">>,    % Delimiter
-  hmac =  <<"">>,             % HMAC
-  header,                     % Serialized header
-  parent_header,              % Serialized parent_header
-  metadata = <<"{}">>,        % Serialized metadata
-  content                     % Serialized content
-}).
-
+-record(state,
+        {
+         shell_socket,
+         iopub_socket,
+         exec_count,
+         key
+        }).
 
 %%% @doc Starts the shell server
 start(ShellSocket, IOPubSocket, ConnData) ->
-    ExeCount = 1,
-    loop(ShellSocket, IOPubSocket, ExeCount, ConnData).
+    State = #state{
+               shell_socket=ShellSocket,
+               iopub_socket=IOPubSocket,
+               exec_count=0,
+               key=ConnData#ierl_connection_file.signature_key
+              },
 
-loop(ShellSocket, IOPubSocket, ExeCount, ConnData) ->
-   shell_listener(ShellSocket, IOPubSocket, ExeCount, ConnData, []),
-   loop(ShellSocket, IOPubSocket, ExeCount, ConnData).
+    loop(State).
+
+loop(State) ->
+   State1 = shell_listener(State),
+   loop(State1).
 
 
 %%% @doc Listens for messages on the Shell Socket, parses and
 %%%      acts upon the message contents, then replies to IPython
-shell_listener(ShellSocket, IOPubSocket, ExeCount, ConnData, Bindings)->
-    print("in shell listener"),
-    {ok, Mp} = chumak:recv_multipart(ShellSocket),
+shell_listener(State)->
+    {ok, Mp} = chumak:recv_multipart(State#state.shell_socket),
 
-    [UUID, Delim, Hmac, Header, ParentHeader, Metadata, Content] = Mp,
+    Decoded = ierl_msg:decode(Mp, State#state.key),
+    lager:debug("Received message ~p", [lager:pr(Decoded, ?MODULE)]),
 
-    print("[Shell] Received UUID ",[UUID]),
-    print("[Shell] Received Delim ", [Delim]),
-    print("[Shell] Received HMAC ", [Hmac]),
-    print("[Shell] Received Header ", [Header]),
-    print("[Shell] Received ParentHeader ", [ParentHeader]),
-    print("[Shell] Received Metadata ", [Metadata]),
-    print("[Shell] Received Content ", [Content]),
+    MsgType = ierl_msg:msg_type(Decoded),
+    State1 = process_message(MsgType, Decoded, State),
+    State1.
 
-    case ierl_message_parser:parse_header(Header) of
-        %%% KERNEL_INFO_REQUEST
-        {ok, _Username, Session, _MessageID, ?KERNEL_INFO_REQUEST, Date}->
-      %%% KERNEL_INFO_REPLY
-      KernelInfoReply = #reply_message{
-        uuid = Session,
-        parent_header = Header,
-        header = ierl_message_builder:generate_header_reply(Session, ?KERNEL_INFO_REPLY, Date),
-        content = ierl_message_builder:generate_content_reply(kernel_info_reply)
-      },
-      ierl_message_sender:send_reply(KernelInfoReply, ShellSocket);
-        %%% EXECUTE_REQUEST
-        {ok, _Username, Session, _MessageID, ?EXECUTE_REQUEST, Date}->
-            %%% EXECUTE_REPLY STEPS:
-      % 1. SEND BUSY STATUS ON IOPUB
-      % 2. PARSE EXECUTE_REQUEST CONTENT
-      % 3. SEND PYIN ON IOPUB
-      % 4. EVALUATE THE ERLANG CODE
-      % 5. SEND EXECUTE_REPLY MESSAGE ON SHELL SOCKET
-      % 6. SEND PYOUT MESSAGE ON IOPUB
-      % 7. SEND IDLE STATUS MESSAGE ON IOPUB
 
-      %%% 1. SEND BUSY STATUS ON IOPUB
-      BusyReplyRecord = #reply_message{
-        uuid = Session,
-        header = ierl_message_builder:generate_header_reply(Session, ?STATUS, Date),
-        parent_header = Header,
-        content = ierl_message_builder:generate_content_reply(busy)
-      },
-      ierl_message_sender:send_reply(BusyReplyRecord, IOPubSocket),
+process_message(<<"kernel_info_request">>, Msg, State) ->
+    {ok, Version} = file:read_file(
+                      filename:join(
+                        [
+                         code:root_dir(),
+                         "releases",
+                         erlang:system_info(otp_release),
+                         "OTP_VERSION"
+                        ]
+                       )
+                     ),
 
-            %%% 2. PARSE EXECUTE_REQUEST CONTENT
-            {ok, Code, _Silent, _StoreHistory, _UserVariables, _UserExpressions, _AllowStdin}
-        = ierl_message_parser:parse_content(Content, execute_request),
+    %    Build the proplist to be converted to json
+    Content =
+    #{
+      protocol_version => <<"5.1">>,
+      implementation => <<"IErlang">>,
+      implementation_version => <<"0.2">>,
+      language_info => #{
+        name => erlang,
+        version => Version,
+        file_extension => <<".erl">>
+       }
+     },
 
-      %%% 3. SEND PYIN ON IOPUB
-      ierl_message_sender:send_pyin(IOPubSocket, Code, [Session, Header, Date]),
+    reply(Content, Msg, shell, State),
+    State;
 
-            %%% 4. EVALUATE THE ERLANG CODE
-            case ierl_code_manager:module_or_expression(Code, Bindings) of
-        %%%---------------------------------------------------------------
-        %%% MODULE COMPILATION RESULTS
-        %%% --------------------------------------------------------------
-        {ok, CompileResultList}->
-          case CompileResultList of
-            [] -> CompileResult = ?SUCCESS_MSG;
-            CompileMessage -> CompileResult = CompileMessage
-          end,
-          print("[Shell] Code Compile Result = ", [CompileResult]),
+process_message(<<"complete_request">>, Msg, State) ->
+    reply(#{ status => <<"error">> }, Msg, shell, State),
+    State;
 
-          %%% 5. SEND EXECUTE_REPLY MESSAGE ON SHELL SOCKET
-          print("[Shell] Generating execute content reply"),
-          print("[Shell] Value = ", [CompileResult]),
-          ExecuteReplyRecord = #reply_message{
-            uuid = Session,
-            header = ierl_message_builder:generate_header_reply(Session, ?EXECUTE_REPLY, Date),
-            parent_header = Header,
-            content = ierl_message_builder:generate_content_reply(execute_reply, {?OK_STATUS, ExeCount, {}, {}})
-          },
-          ierl_message_sender:send_reply(ExecuteReplyRecord, ShellSocket),
+process_message(<<"execute_request">>, Msg, State) ->
+    reply(#{ status => <<"error">> }, Msg, shell, State),
+    State#state{exec_count=State#state.exec_count + 1}.
 
-          %%% 6. SEND PYOUT MESSAGE ON IOPUB
-          ierl_message_sender:send_pyout(IOPubSocket, CompileResult, [Session, Header, Date, ExeCount]),
 
-          %%% 7. SEND IDLE STATUS MESSAGE ON IOPUB
-          IdleStatusReplyRecord = #reply_message{
-            uuid = Session,
-            header = ierl_message_builder:generate_header_reply(Session, ?STATUS, Date),
-            parent_header = Header,
-            content = ierl_message_builder:generate_content_reply(idle)
-          },
-          ierl_message_sender:send_reply(IdleStatusReplyRecord, IOPubSocket),
+reply(NewMsg, Msg, Socket, State) ->
+    NewMsg1 = case NewMsg of
+                  #ierl_msg{} -> NewMsg;
+                  _ -> #ierl_msg{content=NewMsg}
+              end,
 
-          %%% Call Shell Listener again, incrementing the execution count by one.
-          shell_listener(ShellSocket, IOPubSocket, ExeCount+1, ConnData, Bindings);
-        %%%----------------------------------------------------------------
-        %%% SUCCESSFUL CODE EXECUTION
-        %%%----------------------------------------------------------------
-                {ok, Value, NewBindings}->
-                    print("[Shell] Code Execution Result = ", [Value]),
+    Reply = ierl_msg:add_headers(
+              NewMsg1, Msg,
+              to_reply_type(ierl_msg:msg_type(Msg))
+             ),
 
-          %%% 5. SEND EXECUTE_REPLY MESSAGE ON SHELL SOCKET
-          print("[Shell] Generating execute content reply"),
-          print("[Shell] Value = ", [Value]),
-          ExecuteReplyRecord = #reply_message{
-            uuid = Session,
-            header = ierl_message_builder:generate_header_reply(Session, ?EXECUTE_REPLY, Date),
-            parent_header = Header,
-            content = ierl_message_builder:generate_content_reply(execute_reply, {?OK_STATUS, ExeCount, {}, {}})
-          },
-          ierl_message_sender:send_reply(ExecuteReplyRecord, ShellSocket),
+    do_send(Reply, Socket, State).
 
-          %%% 6. SEND PYOUT MESSAGE ON IOPUB
-          ierl_message_sender:send_pyout(IOPubSocket, Value, [Session, Header, Date, ExeCount]),
 
-          %%% 7. SEND IDLE STATUS MESSAGE ON IOPUB
-          IdleStatusReplyRecord = #reply_message{
-            uuid = Session,
-            header = ierl_message_builder:generate_header_reply(Session, ?STATUS, Date),
-            parent_header = Header,
-            content = ierl_message_builder:generate_content_reply(idle)
-          },
-          ierl_message_sender:send_reply(IdleStatusReplyRecord, IOPubSocket),
+do_send(Msg, Socket, State) ->
+    Socket1 = case Socket of
+                  shell ->
+                      State#state.shell_socket;
+                  iopub ->
+                      State#state.iopub_socket
+              end,
 
-          %%% Call Shell Listener again, incrementing the execution count by one.
-          shell_listener(ShellSocket, IOPubSocket, ExeCount+1, ConnData, NewBindings);
-        %%%--------------------------------------------------------------
-        %% UNSUCCESSFUL CODE EXECUTION TODO - each char of Traceback being output on separate line
-        %% --------------------------------------------------------------
-                {error, Exception, Reason}->
-                    print("[Shell] Code Execution Exception = ", [Exception]),
-          print("Building error execute reply"),
+    Encoded = ierl_msg:encode(Msg, State#state.key),
+    lager:debug("Encoded message: ~p", [Encoded]),
+    chumak:send_multipart(Socket1, Encoded).
 
-          %% ERROR EXECUTE_REPLY %%TODO - Traceback appears as a list of a million chars :/
-          %% Leaving Traceback param as an empty list for now, and outputting via pyout
-          %% reply_type, status, exe_count, excetpionName, ExceptionValue, TracebackList
-          %%% 5. SEND EXECUTE_REPLY MESSAGE ON SHELL SOCKET
-          ExecuteReplyRecord = #reply_message{
-            uuid = Session,
-            header = ierl_message_builder:generate_header_reply(Session, ?EXECUTE_REPLY, Date),
-            parent_header = Header,
-            content = ierl_message_builder:generate_content_reply(execute_reply_error,
-                                      {"error", ExeCount, Exception, Reason, []})
-          },
-          ierl_message_sender:send_reply(ExecuteReplyRecord, ShellSocket),
 
-          %% PYERR MESSAGE
-          %% ierl_message_sender:send_pyerr(IOPubSocket, Exception, ExeCount, Reason, [Traceback], [Session, Header, Date]),
-
-          %%% 6. SEND PYOUT MESSAGE ON IOPUB
-          ierl_message_sender:send_pyout(IOPubSocket, Reason, [Session, Header, Date, ExeCount]),
-
-          %%% 7. SEND IDLE STATUS MESSAGE ON IOPUB
-          IdleStatusReplyRecord = #reply_message{
-            uuid = Session,
-            header = ierl_message_builder:generate_header_reply(Session, ?STATUS, Date),
-            parent_header = Header,
-            content = ierl_message_builder:generate_content_reply(idle)
-          },
-          ierl_message_sender:send_reply(IdleStatusReplyRecord, IOPubSocket),
-
-          shell_listener(ShellSocket, IOPubSocket, ExeCount+1, ConnData, Bindings)
-            end;
-    %%%----------------------------------------------------------------
-    %%% COMPLETE_REQUEST
-    %%%----------------------------------------------------------------
-    {ok, _Username, _Session, _MessageID, ?COMPLETE_REQUEST, _Date}->
-      print("[Shell] Received complete_request message"),
-      case ierl_message_parser:parse_content(Content, complete_request) of
-        %%TODO - do something with complete_request
-        {ok, _Text, _Line, _Block, _CursorPos} ->
-          print("TODO");
-        {error, Reason} ->
-          print("[Shell] Error parsing complete_request - ", [Reason])
-      end,
-      shell_listener(ShellSocket, IOPubSocket, ExeCount, ConnData, Bindings);
-    {error, _Username, _Session, _MessageID, _UnexpectedMessageType, _Date} ->
-      print("[Shell] Received unexpected message - " + [_UnexpectedMessageType]);
-    {error, Reason} ->
-      print("[Shell] Error occured trying to parse message - ", [Reason])
-
-    end.
-
-%% @doc Function to print stuff if debugging is set to true
-print(Stuff)->
-    io:format("~p~n", [Stuff]).
-print(Prompt, Stuff)->
-    io:format(string:concat(Prompt, "~p~n"), [Stuff]).
-
+to_reply_type(MsgType) ->
+    binary:replace(MsgType, <<"request">>, <<"reply">>).

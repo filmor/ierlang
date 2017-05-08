@@ -20,7 +20,7 @@
 
 %% @spec generate_header_reply(list(), list(), list()) -> list()
 %% @doc Creates the header for the message being sent to IPython
-generate_header_reply(Session, MessageType, Date)->
+generate_header_reply(Session, MessageType, Date) ->
   HeaderPropList = [
     {date, Date},
     {username, ?USERNAME},
