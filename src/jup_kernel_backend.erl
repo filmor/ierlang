@@ -22,13 +22,18 @@
 -record(state, {
           name,
           backend,
-          backend_state
+          backend_state,
+          exec_counter = 0
          }).
 
 
 -spec start_link(Name :: atom(), Backend :: module()) -> {ok, pid()}.
 start_link(Name, Backend) ->
     gen_server:start_link(?JUP_VIA(Name, backend), ?MODULE, [Name, Backend], []).
+
+
+execute(Name, Something) ->
+    gen_server:call(?JUP_VIA(Name, backend), {execute, Something}).
 
 
 init([Name, Backend]) ->
