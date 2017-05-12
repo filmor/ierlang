@@ -1,6 +1,6 @@
 -module(ierl_connection_file).
 
--include("./records.hrl").
+-include("internal.hrl").
 
 -export([
     parse/1
@@ -20,7 +20,7 @@ parse(Filename) ->
     Transport = proplists:get_value(<<"transport">>, JsonData),
     IOPubPort = proplists:get_value(<<"iopub_port">>, JsonData),
 
-    #ierl_connection_file{
+    #jup_conn_data{
        transport = binary_to_existing_atom(Transport, utf8),
        ip = IP,
 

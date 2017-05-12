@@ -1,4 +1,4 @@
--module(ierl_msg).
+-module(jup_msg).
 
 -export([
          decode/2,
@@ -7,13 +7,13 @@
          add_headers/3
         ]).
 
--include("./records.hrl").
+-include("internal.hrl").
 
 -define(DELIM, <<"<IDS|MSG>">>).
 -define(VERSION, <<"5.1">>).
 
 
--spec decode([binary()], {crypto:hash_algorithms(), binary()}) -> #ierl_msg{}.
+-spec decode([binary()], {crypto:hash_algorithms(), binary()}) -> #jup_msg{}.
 decode(MultipartMsg, {SignatureScheme, Key}) ->
     {Uuids, Suffix} = ierl_util:split_at_delim(MultipartMsg, ?DELIM),
 
@@ -32,7 +32,7 @@ decode(MultipartMsg, {SignatureScheme, Key}) ->
         _ -> error(invalid_signature)
     end,
 
-    #ierl_msg{
+    #jup_msg{
        uuids = Uuids,
        header = jsx:decode(Header, [return_maps]),
        parent_header = jsx:decode(ParentHeader, [return_maps]),
@@ -43,48 +43,48 @@ decode(MultipartMsg, {SignatureScheme, Key}) ->
       }.
 
 
--spec encode(#ierl_msg{}, {crypto:hash_algorithms(), binary()}) -> [binary()].
-encode(#ierl_msg{} = Msg, {SignatureScheme, Key}) ->
+-spec encode(#jup_msg{}, {crypto:hash_algorithms(), binary()}) -> [binary()].
+encode(#jup_msg{} = Msg, {SignatureScheme, Key}) ->
     Ctx0 = crypto:hmac_init(SignatureScheme, Key),
-    Header = jsx:encode(Msg#ierl_msg.header),
+    Header = jsx:encode(Msg#jup_msg.header),
     Ctx1 = crypto:hmac_update(Ctx0, Header),
-    ParentHeader = jsx:encode(Msg#ierl_msg.parent_header),
+    ParentHeader = jsx:encode(Msg#jup_msg.parent_header),
     Ctx2 = crypto:hmac_update(Ctx1, ParentHeader),
-    Metadata = jsx:encode(Msg#ierl_msg.metadata),
+    Metadata = jsx:encode(Msg#jup_msg.metadata),
     Ctx3 = crypto:hmac_update(Ctx2, Metadata),
-    Content = jsx:encode(Msg#ierl_msg.content),
+    Content = jsx:encode(Msg#jup_msg.content),
     Ctx4 = crypto:hmac_update(Ctx3, Content),
 
     Signature = ierl_util:hexlify(crypto:hmac_final(Ctx4)),
 
     % TODO
-    Msg#ierl_msg.uuids ++ [
+    Msg#jup_msg.uuids ++ [
      ?DELIM,
      Signature,
      Header,
      ParentHeader,
      Metadata,
      Content
-     | Msg#ierl_msg.extra_binaries
+     | Msg#jup_msg.extra_binaries
     ].
 
 
-header_entry(#ierl_msg{header=Header}, Key) ->
+header_entry(#jup_msg{header=Header}, Key) ->
     BinKey = ierl_util:ensure_binary(Key),
     maps:get(BinKey, Header).
 
 
--spec msg_type(#ierl_msg{}) -> binary().
-msg_type(#ierl_msg{} = Msg) ->
+-spec msg_type(#jup_msg{}) -> binary().
+msg_type(#jup_msg{} = Msg) ->
     header_entry(Msg, msg_type).
 
--spec msg_id(#ierl_msg{}) -> binary().
-msg_id(#ierl_msg{} = Msg) ->
+-spec msg_id(#jup_msg{}) -> binary().
+msg_id(#jup_msg{} = Msg) ->
     header_entry(Msg, msg_id).
 
 
--spec add_headers(#ierl_msg{}, #ierl_msg{}, atom() | binary()) -> #ierl_msg{}.
-add_headers(Msg = #ierl_msg{}, Parent = #ierl_msg{}, MessageType) ->
+-spec add_headers(#jup_msg{}, #jup_msg{}, atom() | binary()) -> #jup_msg{}.
+add_headers(Msg = #jup_msg{}, Parent = #jup_msg{}, MessageType) ->
     Header = #{
       <<"date">> => iso8601:format(os:timestamp()),
       <<"username">> => header_entry(Parent, username),
@@ -94,8 +94,8 @@ add_headers(Msg = #ierl_msg{}, Parent = #ierl_msg{}, MessageType) ->
       <<"version">> => ?VERSION
      },
 
-    Msg#ierl_msg{
-      uuids=Parent#ierl_msg.uuids,
+    Msg#jup_msg{
+      uuids=Parent#jup_msg.uuids,
       header=Header,
-      parent_header=Parent#ierl_msg.header
+      parent_header=Parent#jup_msg.header
      }.

@@ -11,7 +11,7 @@
 -author("Robbie Lynch").
 -export ([start/3]).
 
--include("./records.hrl").
+-include("internal.hrl").
 
 -record(state,
         {
@@ -27,7 +27,7 @@ start(ShellSocket, IOPubSocket, ConnData) ->
                shell_socket=ShellSocket,
                iopub_socket=IOPubSocket,
                exec_count=0,
-               key=ConnData#ierl_connection_file.signature_key
+               key=ConnData#jup_conn_data.signature_key
               },
 
     loop(State).
@@ -42,10 +42,10 @@ loop(State) ->
 shell_listener(State)->
     {ok, Mp} = chumak:recv_multipart(State#state.shell_socket),
 
-    Decoded = ierl_msg:decode(Mp, State#state.key),
+    Decoded = jup_msg:decode(Mp, State#state.key),
     lager:debug("Received message ~p", [lager:pr(Decoded, ?MODULE)]),
 
-    MsgType = ierl_msg:msg_type(Decoded),
+    MsgType = jup_msg:msg_type(Decoded),
     State1 = process_message(MsgType, Decoded, State),
     State1.
 
@@ -101,13 +101,13 @@ process_message(_Unknown, Msg, State) ->
 
 reply(NewMsg, Msg, Socket, State) ->
     NewMsg1 = case NewMsg of
-                  #ierl_msg{} -> NewMsg;
-                  _ -> #ierl_msg{content=NewMsg}
+                  #jup_msg{} -> NewMsg;
+                  _ -> #jup_msg{content=NewMsg}
               end,
 
-    Reply = ierl_msg:add_headers(
+    Reply = jup_msg:add_headers(
               NewMsg1, Msg,
-              to_reply_type(ierl_msg:msg_type(Msg))
+              to_reply_type(jup_msg:msg_type(Msg))
              ),
 
     do_send(Reply, Socket, State).
@@ -121,7 +121,7 @@ do_send(Msg, Socket, State) ->
                       State#state.iopub_socket
               end,
 
-    Encoded = ierl_msg:encode(Msg, State#state.key),
+    Encoded = jup_msg:encode(Msg, State#state.key),
     lager:debug("Encoded message: ~p", [Encoded]),
     chumak:send_multipart(Socket1, Encoded).
 

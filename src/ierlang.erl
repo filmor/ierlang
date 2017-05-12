@@ -11,26 +11,25 @@
 -module (ierlang).
 -export ([main/1]).
 
--include("./records.hrl").
-
-%% JSON FILE CONTENTS
-%% Receives a list of arguments from IPython.
-%% The list contains the absolute path to the kernel.json file.
-%% The kernel.json file contains:
-%%      stdin_port: 52248,
-%%      ip: "127.0.0.1",
-%%      control_port: 52249,
-%%      hb_port: 52250,
-%%      signature_scheme: "hmac-sha256",
-%%      key: "",
-%%      shell_port: 52246,
-%%      transport: "tcp",
-%%      iopub_port: 52247
+-include("internal.hrl").
 
 main([JsonFile]) ->
+    % TODO: Add proper command-line handling.
+
     {ok, _Deps} = application:ensure_all_started(ierlang),
+    lager:set_loglevel(lager_console_backend, debug),
 
     lager:info("Starting Erlang kernel with connection file ~s", [JsonFile]),
     %% Read json file
-    ConnData = #ierl_connection_file{} = ierl_connection_file:parse(JsonFile),
-    ierl_zmq_manager:run(ConnData).
+    ConnData = #jup_conn_data{} = ierl_connection_file:parse(JsonFile),
+
+    {ok, Pid} = jup_kernel_sup:start_link(
+                  ierlang, ConnData, jup_kernel_backend_stub
+                 ),
+
+    % TODO: Start the supervisor via application, set_env to set the options?
+    MonitorRef = monitor(process, Pid),
+    receive
+        {'DOWN', MonitorRef, process, _, _} ->
+            lager:info("Kernel supervisor is down, stopping.")
+    end.
